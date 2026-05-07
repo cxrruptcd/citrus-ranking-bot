@@ -86,13 +86,22 @@ export async function getRobloxProfileDescription(userId: string): Promise<strin
   }
 }
 
-export async function getGroupOwner(): Promise<string | null> {
+export async function getGroupOwnerUserId(): Promise<string | null> {
   try {
+    // Try Cloud v2 group details
     const res = await robloxFetch(`/cloud/v2/groups/${GROUP_ID}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { owner?: string };
-    // owner is a path like "users/12345"
-    return data.owner?.replace("users/", "") ?? null;
+    if (res.ok) {
+      const data = (await res.json()) as { owner?: string };
+      // owner field is "users/12345678"
+      if (data.owner) return data.owner.replace("users/", "");
+    }
+    // Fallback to legacy groups API (no auth needed for public groups)
+    const legacyRes = await fetch(`https://groups.roblox.com/v1/groups/${GROUP_ID}`);
+    if (legacyRes.ok) {
+      const data = (await legacyRes.json()) as { owner?: { userId?: number } };
+      if (data.owner?.userId) return String(data.owner.userId);
+    }
+    return null;
   } catch (err) {
     logger.error({ err }, "Failed to get group owner");
     return null;
@@ -101,33 +110,67 @@ export async function getGroupOwner(): Promise<string | null> {
 
 export async function getGroupMembership(userId: string): Promise<GroupMembership | null> {
   try {
-    // Check if user is the group owner (rank 255 / owner slot)
-    const ownerIdPromise = getGroupOwner();
+    // Kick off owner check in parallel
+    const ownerIdPromise = getGroupOwnerUserId();
 
     const res = await robloxFetch(
       `/cloud/v2/groups/${GROUP_ID}/memberships?filter=user=='users/${userId}'`
     );
+
+    const ownerId = await ownerIdPromise;
+    const isOwner = ownerId === userId;
+
     if (!res.ok) {
       const text = await res.text();
       logger.warn({ status: res.status, body: text }, "Failed to get group membership");
+
+      // If the API fails but we know the user is the owner, return a synthetic membership
+      if (isOwner) {
+        logger.info({ userId }, "Returning synthetic owner membership due to API failure");
+        return {
+          groupId: Number(GROUP_ID),
+          membershipPath: `groups/${GROUP_ID}/memberships/owner`,
+          role: { id: 0, name: "Owner", rank: 255 },
+          isOwner: true,
+        };
+      }
       return null;
     }
+
     const data = (await res.json()) as {
       groupMemberships: Array<{ path: string; role: string; user: string }>;
     };
     const membership = data.groupMemberships?.[0];
-    if (!membership) return null;
+    if (!membership) {
+      // Not in group — but check owner fallback
+      if (isOwner) {
+        return {
+          groupId: Number(GROUP_ID),
+          membershipPath: `groups/${GROUP_ID}/memberships/owner`,
+          role: { id: 0, name: "Owner", rank: 255 },
+          isOwner: true,
+        };
+      }
+      return null;
+    }
 
     const roleRes = await robloxFetch(`/cloud/v2/${membership.role}`);
-    if (!roleRes.ok) return null;
+    if (!roleRes.ok) {
+      if (isOwner) {
+        return {
+          groupId: Number(GROUP_ID),
+          membershipPath: membership.path,
+          role: { id: 0, name: "Owner", rank: 255 },
+          isOwner: true,
+        };
+      }
+      return null;
+    }
     const role = (await roleRes.json()) as {
       id: string;
       displayName: string;
       rank: number;
     };
-
-    const ownerId = await ownerIdPromise;
-    const isOwner = ownerId === userId;
 
     return {
       groupId: Number(GROUP_ID),
@@ -135,7 +178,6 @@ export async function getGroupMembership(userId: string): Promise<GroupMembershi
       role: {
         id: Number(role.id),
         name: isOwner ? "Owner" : role.displayName,
-        // Group owners show as rank 255 which is the highest possible
         rank: isOwner ? 255 : role.rank,
       },
       isOwner,
@@ -174,19 +216,14 @@ export async function getGroupRoles(): Promise<GroupRole[]> {
   }
 }
 
-// membershipPath is the full path returned by getGroupMembership, e.g.
+// membershipPath is the full path from getGroupMembership, e.g.
 // "groups/32805863/memberships/1234567890"
 export async function setGroupRank(membershipPath: string, roleId: number): Promise<boolean> {
   try {
-    const res = await robloxFetch(
-      `/cloud/v2/${membershipPath}?updateMask=role`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({
-          role: `groups/${GROUP_ID}/roles/${roleId}`,
-        }),
-      }
-    );
+    const res = await robloxFetch(`/cloud/v2/${membershipPath}?updateMask=role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role: `groups/${GROUP_ID}/roles/${roleId}` }),
+    });
     if (!res.ok) {
       const text = await res.text();
       logger.warn({ status: res.status, body: text }, "Failed to set group rank");
@@ -199,13 +236,28 @@ export async function setGroupRank(membershipPath: string, roleId: number): Prom
   }
 }
 
+export async function postGroupShout(message: string): Promise<boolean> {
+  try {
+    const res = await robloxFetch(`/cloud/v2/groups/${GROUP_ID}/shouts`, {
+      method: "POST",
+      body: JSON.stringify({ content: message }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      logger.warn({ status: res.status, body: text }, "Failed to post group shout");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Failed to post group shout");
+    return false;
+  }
+}
+
 export async function promoteUser(
   userId: string
 ): Promise<{ success: boolean; newRole?: GroupRole }> {
-  const [roles, membership] = await Promise.all([
-    getGroupRoles(),
-    getGroupMembership(userId),
-  ]);
+  const [roles, membership] = await Promise.all([getGroupRoles(), getGroupMembership(userId)]);
   if (!membership) return { success: false };
 
   const sortedRoles = roles
@@ -225,10 +277,7 @@ export async function promoteUser(
 export async function demoteUser(
   userId: string
 ): Promise<{ success: boolean; newRole?: GroupRole }> {
-  const [roles, membership] = await Promise.all([
-    getGroupRoles(),
-    getGroupMembership(userId),
-  ]);
+  const [roles, membership] = await Promise.all([getGroupRoles(), getGroupMembership(userId)]);
   if (!membership) return { success: false };
 
   const sortedRoles = roles
@@ -236,9 +285,7 @@ export async function demoteUser(
     .sort((a, b) => a.rank - b.rank);
   const currentIndex = sortedRoles.findIndex((r) => r.rank === membership.role.rank);
 
-  if (currentIndex <= 0) {
-    return { success: false };
-  }
+  if (currentIndex <= 0) return { success: false };
 
   const prevRole = sortedRoles[currentIndex - 1];
   const success = await setGroupRank(membership.membershipPath, prevRole.id);
