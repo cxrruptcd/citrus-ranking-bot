@@ -1,0 +1,93 @@
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+} from "discord.js";
+import { demoteUser, isAdminRank } from "../lib/roblox.js";
+import { getUserByDiscordId } from "../lib/db.js";
+import { logger } from "../lib/logger.js";
+
+export const data = new SlashCommandBuilder()
+  .setName("demote")
+  .setDescription("Demote a user one rank down in the Roblox group")
+  .addUserOption((opt) =>
+    opt.setName("user").setDescription("Discord user to demote").setRequired(true)
+  );
+
+export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+
+  const callerDb = await getUserByDiscordId(interaction.user.id);
+  if (!callerDb) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Not Linked")
+          .setDescription("You need to link your Roblox account first with `/link`."),
+      ],
+    });
+    return;
+  }
+
+  const admin = await isAdminRank(callerDb.robloxId);
+  if (!admin) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Permission Denied")
+          .setDescription("You must be Presidential Assistant or higher in the group to use this command."),
+      ],
+    });
+    return;
+  }
+
+  const target = interaction.options.getUser("user", true);
+  const targetDb = await getUserByDiscordId(target.id);
+
+  if (!targetDb) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Not Linked")
+          .setDescription(`<@${target.id}> hasn't linked their Roblox account yet.`),
+      ],
+    });
+    return;
+  }
+
+  const result = await demoteUser(targetDb.robloxId);
+
+  if (!result.success || !result.newRole) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Demotion Failed")
+          .setDescription(
+            `Could not demote **${targetDb.robloxUsername}**. They may already be at the lowest rank.`
+          ),
+      ],
+    });
+    return;
+  }
+
+  logger.info(
+    { admin: interaction.user.id, target: target.id, newRank: result.newRole.rank },
+    "User demoted"
+  );
+
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xe67e22)
+        .setTitle("User Demoted")
+        .setDescription(
+          `**${targetDb.robloxUsername}** has been demoted to **${result.newRole.name}** (Rank ${result.newRole.rank}).`
+        )
+        .setFooter({ text: `Demoted by ${interaction.user.tag}` }),
+    ],
+  });
+}
