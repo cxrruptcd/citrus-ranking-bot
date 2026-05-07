@@ -20,6 +20,8 @@ import * as setcreditchannelCmd from "./commands/setcreditchannel.js";
 import * as redeemcreditsCmd from "./commands/redeemcredits.js";
 import * as creditboardCmd from "./commands/creditboard.js";
 import * as strikeCmd from "./commands/strike.js";
+import * as mystrikesCmd from "./commands/mystrikes.js";
+import * as viewstrikesCmd from "./commands/viewstrikes.js";
 import * as setlogchannelCmd from "./commands/setlogchannel.js";
 import * as assignDepartmentCmd from "./commands/assign-department.js";
 import * as infoCmd from "./commands/info.js";
@@ -54,6 +56,8 @@ for (const cmd of [
   redeemcreditsCmd,
   creditboardCmd,
   strikeCmd,
+  mystrikesCmd,
+  viewstrikesCmd,
   setlogchannelCmd,
   assignDepartmentCmd,
   infoCmd,
