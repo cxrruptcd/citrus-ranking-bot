@@ -1,8 +1,7 @@
 FROM node:22-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@latest --activate
-ENV npm_config_user_agent="pnpm/"
+RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
 WORKDIR /app
 
@@ -19,7 +18,7 @@ COPY artifacts/discord-bot/package.json ./artifacts/discord-bot/package.json
 COPY artifacts/discord-bot/tsconfig.json ./artifacts/discord-bot/tsconfig.json
 
 # Install dependencies (discord-bot + its workspace deps)
-RUN pnpm install --filter @workspace/discord-bot...
+RUN pnpm install --frozen-lockfile --filter @workspace/discord-bot...
 
 # Copy source
 COPY lib/db/ ./lib/db/
