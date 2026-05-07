@@ -7,15 +7,25 @@ import * as demoteCmd from "./commands/demote.js";
 import * as setrankCmd from "./commands/setrank.js";
 import * as creditsCmd from "./commands/credits.js";
 import * as setlogchannelCmd from "./commands/setlogchannel.js";
+import * as assignDepartmentCmd from "./commands/assign-department.js";
+import * as infoCmd from "./commands/info.js";
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 if (!DISCORD_TOKEN) {
   throw new Error("DISCORD_TOKEN environment variable is required");
 }
 
-const commands = [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsCmd, setlogchannelCmd].map((c) =>
-  c.data.toJSON()
-);
+const commands = [
+  linkCmd,
+  rankCmd,
+  promoteCmd,
+  demoteCmd,
+  setrankCmd,
+  creditsCmd,
+  setlogchannelCmd,
+  assignDepartmentCmd,
+  infoCmd,
+].map((c) => c.data.toJSON());
 
 const rest = new REST().setToken(DISCORD_TOKEN);
 
