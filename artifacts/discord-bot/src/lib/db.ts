@@ -1,6 +1,8 @@
-import { db, usersTable, creditLogsTable, guildSettingsTable, pendingVerificationsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import type { User, PendingVerification } from "@workspace/db";
+import { db, usersTable, creditLogsTable, guildSettingsTable, pendingVerificationsTable, strikesTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import type { User, PendingVerification, Strike } from "@workspace/db";
+
+// ── Users ──────────────────────────────────────────────────────────────────
 
 export async function getUserByDiscordId(discordId: string): Promise<User | null> {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.discordId, discordId));
@@ -28,8 +30,6 @@ export async function linkUser(
   return user;
 }
 
-// ── Department ─────────────────────────────────────────────────────────────
-
 export async function setUserDepartment(
   discordId: string,
   department: string | null
@@ -42,6 +42,10 @@ export async function setUserDepartment(
   return updated ?? null;
 }
 
+export async function getTopCreditHolders(limit = 10): Promise<User[]> {
+  return db.select().from(usersTable).orderBy(desc(usersTable.credits)).limit(limit);
+}
+
 // ── Pending verifications ──────────────────────────────────────────────────
 
 export async function createPendingVerification(
@@ -50,7 +54,7 @@ export async function createPendingVerification(
   robloxUsername: string,
   code: string
 ): Promise<PendingVerification> {
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
   const [row] = await db
     .insert(pendingVerificationsTable)
     .values({ discordId, robloxId, robloxUsername, code, expiresAt })
@@ -113,42 +117,86 @@ export async function getCredits(discordId: string): Promise<number | null> {
   return user?.credits ?? null;
 }
 
+export async function redeemAllCredits(discordId: string): Promise<{ amount: number } | null> {
+  const user = await getUserByDiscordId(discordId);
+  if (!user || user.credits === 0) return null;
+  const amount = user.credits;
+  await db.update(usersTable).set({ credits: 0 }).where(eq(usersTable.discordId, discordId));
+  await db.insert(creditLogsTable).values({
+    discordId,
+    adminDiscordId: discordId,
+    amount: -amount,
+    reason: "Redeemed for Robux",
+  });
+  return { amount };
+}
+
+// ── Strikes ────────────────────────────────────────────────────────────────
+
+export async function issueStrike(
+  discordId: string,
+  issuedBy: string,
+  reason: string
+): Promise<Strike> {
+  const [row] = await db
+    .insert(strikesTable)
+    .values({ discordId, issuedBy, reason })
+    .returning();
+  return row;
+}
+
+export async function getActiveStrikes(discordId: string): Promise<Strike[]> {
+  return db
+    .select()
+    .from(strikesTable)
+    .where(eq(strikesTable.discordId, discordId))
+    .orderBy(desc(strikesTable.createdAt));
+}
+
+export async function clearStrikes(discordId: string): Promise<number> {
+  const rows = await db
+    .delete(strikesTable)
+    .where(eq(strikesTable.discordId, discordId))
+    .returning();
+  return rows.length;
+}
+
 // ── Guild settings ─────────────────────────────────────────────────────────
 
 export async function getLogChannel(guildId: string): Promise<string | null> {
-  const [row] = await db
-    .select()
-    .from(guildSettingsTable)
-    .where(eq(guildSettingsTable.guildId, guildId));
+  const [row] = await db.select().from(guildSettingsTable).where(eq(guildSettingsTable.guildId, guildId));
   return row?.logChannelId ?? null;
 }
 
 export async function getAuditLogChannel(guildId: string): Promise<string | null> {
-  const [row] = await db
-    .select()
-    .from(guildSettingsTable)
-    .where(eq(guildSettingsTable.guildId, guildId));
+  const [row] = await db.select().from(guildSettingsTable).where(eq(guildSettingsTable.guildId, guildId));
   return row?.auditLogChannelId ?? row?.logChannelId ?? null;
+}
+
+export async function getCreditChannel(guildId: string): Promise<string | null> {
+  const [row] = await db.select().from(guildSettingsTable).where(eq(guildSettingsTable.guildId, guildId));
+  return row?.creditChannelId ?? row?.logChannelId ?? null;
 }
 
 export async function setLogChannel(guildId: string, channelId: string): Promise<void> {
   await db
     .insert(guildSettingsTable)
     .values({ guildId, logChannelId: channelId })
-    .onConflictDoUpdate({
-      target: guildSettingsTable.guildId,
-      set: { logChannelId: channelId },
-    });
+    .onConflictDoUpdate({ target: guildSettingsTable.guildId, set: { logChannelId: channelId } });
 }
 
 export async function setAuditLogChannel(guildId: string, channelId: string): Promise<void> {
   await db
     .insert(guildSettingsTable)
     .values({ guildId, logChannelId: channelId, auditLogChannelId: channelId })
-    .onConflictDoUpdate({
-      target: guildSettingsTable.guildId,
-      set: { auditLogChannelId: channelId },
-    });
+    .onConflictDoUpdate({ target: guildSettingsTable.guildId, set: { auditLogChannelId: channelId } });
 }
 
-export { db, usersTable, creditLogsTable, guildSettingsTable, pendingVerificationsTable };
+export async function setCreditChannel(guildId: string, channelId: string): Promise<void> {
+  await db
+    .insert(guildSettingsTable)
+    .values({ guildId, logChannelId: channelId, creditChannelId: channelId })
+    .onConflictDoUpdate({ target: guildSettingsTable.guildId, set: { creditChannelId: channelId } });
+}
+
+export { db, usersTable, creditLogsTable, guildSettingsTable, pendingVerificationsTable, strikesTable };
