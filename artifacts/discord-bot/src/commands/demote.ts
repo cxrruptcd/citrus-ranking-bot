@@ -3,15 +3,15 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { demoteUser, isAdminRank } from "../lib/roblox.js";
+import { demoteUser, isAdminRank, getRobloxUserByUsername } from "../lib/roblox.js";
 import { getUserByDiscordId } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
 
 export const data = new SlashCommandBuilder()
   .setName("demote")
-  .setDescription("Demote a user one rank down in the Roblox group")
-  .addUserOption((opt) =>
-    opt.setName("user").setDescription("Discord user to demote").setRequired(true)
+  .setDescription("Demote a Roblox user one rank down in the group")
+  .addStringOption((opt) =>
+    opt.setName("username").setDescription("Roblox username to demote").setRequired(true)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -37,28 +37,27 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("Permission Denied")
-          .setDescription("You must be Presidential Assistant or higher in the group to use this command."),
+          .setDescription("You must be Presidential Assistant or higher to use this command."),
       ],
     });
     return;
   }
 
-  const target = interaction.options.getUser("user", true);
-  const targetDb = await getUserByDiscordId(target.id);
-
-  if (!targetDb) {
+  const usernameInput = interaction.options.getString("username", true);
+  const robloxUser = await getRobloxUserByUsername(usernameInput);
+  if (!robloxUser) {
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xe74c3c)
-          .setTitle("Not Linked")
-          .setDescription(`<@${target.id}> hasn't linked their Roblox account yet.`),
+          .setTitle("User Not Found")
+          .setDescription(`Could not find a Roblox user named **${usernameInput}**.`),
       ],
     });
     return;
   }
 
-  const result = await demoteUser(targetDb.robloxId);
+  const result = await demoteUser(String(robloxUser.id));
 
   if (!result.success || !result.newRole) {
     await interaction.editReply({
@@ -67,7 +66,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setColor(0xe74c3c)
           .setTitle("Demotion Failed")
           .setDescription(
-            `Could not demote **${targetDb.robloxUsername}**. They may already be at the lowest rank.`
+            `Could not demote **${robloxUser.name}**. They may already be at the lowest rank or are not in the group.`
           ),
       ],
     });
@@ -75,7 +74,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   }
 
   logger.info(
-    { admin: interaction.user.id, target: target.id, newRank: result.newRole.rank },
+    { admin: interaction.user.id, robloxUser: robloxUser.name, newRank: result.newRole.rank },
     "User demoted"
   );
 
@@ -85,7 +84,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         .setColor(0xe67e22)
         .setTitle("User Demoted")
         .setDescription(
-          `**${targetDb.robloxUsername}** has been demoted to **${result.newRole.name}** (Rank ${result.newRole.rank}).`
+          `**${robloxUser.name}** has been demoted to **${result.newRole.name}** (Rank ${result.newRole.rank}).`
         )
         .setFooter({ text: `Demoted by ${interaction.user.tag}` }),
     ],

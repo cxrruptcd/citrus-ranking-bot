@@ -12,6 +12,7 @@ import * as promoteCmd from "./commands/promote.js";
 import * as demoteCmd from "./commands/demote.js";
 import * as setrankCmd from "./commands/setrank.js";
 import * as creditsCmd from "./commands/credits.js";
+import { handleGuildMemberAdd } from "./events/guildMemberAdd.js";
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 if (!DISCORD_TOKEN) {
@@ -30,11 +31,20 @@ for (const cmd of [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsC
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
 client.once(Events.ClientReady, (c) => {
   logger.info({ tag: c.user.tag }, "Discord bot is ready");
+});
+
+client.on(Events.GuildMemberAdd, async (member) => {
+  await handleGuildMemberAdd(member).catch((err) =>
+    logger.error({ err }, "Unhandled error in guildMemberAdd")
+  );
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
