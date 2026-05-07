@@ -135,7 +135,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const success = await setGroupRank(String(robloxUser.id), role.id);
+  const success = await setGroupRank(targetMembership.membershipPath, role.id);
 
   if (!success) {
     await interaction.editReply({
