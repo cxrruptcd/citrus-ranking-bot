@@ -6,13 +6,14 @@ import * as promoteCmd from "./commands/promote.js";
 import * as demoteCmd from "./commands/demote.js";
 import * as setrankCmd from "./commands/setrank.js";
 import * as creditsCmd from "./commands/credits.js";
+import * as setlogchannelCmd from "./commands/setlogchannel.js";
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 if (!DISCORD_TOKEN) {
   throw new Error("DISCORD_TOKEN environment variable is required");
 }
 
-const commands = [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsCmd].map((c) =>
+const commands = [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsCmd, setlogchannelCmd].map((c) =>
   c.data.toJSON()
 );
 

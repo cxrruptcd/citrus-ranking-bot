@@ -1,4 +1,4 @@
-import { db, usersTable, creditLogsTable } from "@workspace/db";
+import { db, usersTable, creditLogsTable, guildSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { User } from "@workspace/db";
 
@@ -60,4 +60,22 @@ export async function getCredits(discordId: string): Promise<number | null> {
   return user?.credits ?? null;
 }
 
-export { db, usersTable, creditLogsTable };
+export async function getLogChannel(guildId: string): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(guildSettingsTable)
+    .where(eq(guildSettingsTable.guildId, guildId));
+  return row?.logChannelId ?? null;
+}
+
+export async function setLogChannel(guildId: string, channelId: string): Promise<void> {
+  await db
+    .insert(guildSettingsTable)
+    .values({ guildId, logChannelId: channelId })
+    .onConflictDoUpdate({
+      target: guildSettingsTable.guildId,
+      set: { logChannelId: channelId },
+    });
+}
+
+export { db, usersTable, creditLogsTable, guildSettingsTable };

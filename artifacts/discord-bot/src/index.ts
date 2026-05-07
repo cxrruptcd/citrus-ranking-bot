@@ -12,6 +12,7 @@ import * as promoteCmd from "./commands/promote.js";
 import * as demoteCmd from "./commands/demote.js";
 import * as setrankCmd from "./commands/setrank.js";
 import * as creditsCmd from "./commands/credits.js";
+import * as setlogchannelCmd from "./commands/setlogchannel.js";
 import { handleGuildMemberAdd } from "./events/guildMemberAdd.js";
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -26,7 +27,7 @@ interface Command {
 
 const commands = new Collection<string, Command>();
 
-for (const cmd of [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsCmd]) {
+for (const cmd of [linkCmd, rankCmd, promoteCmd, demoteCmd, setrankCmd, creditsCmd, setlogchannelCmd]) {
   commands.set(cmd.data.name, cmd as Command);
 }
 
