@@ -28,6 +28,20 @@ export async function linkUser(
   return user;
 }
 
+// ── Department ─────────────────────────────────────────────────────────────
+
+export async function setUserDepartment(
+  discordId: string,
+  department: string | null
+): Promise<User | null> {
+  const [updated] = await db
+    .update(usersTable)
+    .set({ department })
+    .where(eq(usersTable.discordId, discordId))
+    .returning();
+  return updated ?? null;
+}
+
 // ── Pending verifications ──────────────────────────────────────────────────
 
 export async function createPendingVerification(
@@ -109,6 +123,14 @@ export async function getLogChannel(guildId: string): Promise<string | null> {
   return row?.logChannelId ?? null;
 }
 
+export async function getAuditLogChannel(guildId: string): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(guildSettingsTable)
+    .where(eq(guildSettingsTable.guildId, guildId));
+  return row?.auditLogChannelId ?? row?.logChannelId ?? null;
+}
+
 export async function setLogChannel(guildId: string, channelId: string): Promise<void> {
   await db
     .insert(guildSettingsTable)
@@ -116,6 +138,16 @@ export async function setLogChannel(guildId: string, channelId: string): Promise
     .onConflictDoUpdate({
       target: guildSettingsTable.guildId,
       set: { logChannelId: channelId },
+    });
+}
+
+export async function setAuditLogChannel(guildId: string, channelId: string): Promise<void> {
+  await db
+    .insert(guildSettingsTable)
+    .values({ guildId, logChannelId: channelId, auditLogChannelId: channelId })
+    .onConflictDoUpdate({
+      target: guildSettingsTable.guildId,
+      set: { auditLogChannelId: channelId },
     });
 }
 
