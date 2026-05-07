@@ -2,6 +2,7 @@ FROM node:22-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@latest --activate
+ENV npm_config_user_agent="pnpm/"
 
 WORKDIR /app
 
