@@ -37,6 +37,7 @@ export interface GroupMembership {
     name: string;
     rank: number;
   };
+  isOwner: boolean;
 }
 
 export interface GroupRole {
@@ -73,8 +74,36 @@ export async function getRobloxUserById(userId: string): Promise<RobloxUser | nu
   }
 }
 
+export async function getRobloxProfileDescription(userId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://users.roblox.com/v1/users/${userId}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { description?: string };
+    return data.description ?? null;
+  } catch (err) {
+    logger.error({ err }, "Failed to get Roblox profile description");
+    return null;
+  }
+}
+
+export async function getGroupOwner(): Promise<string | null> {
+  try {
+    const res = await robloxFetch(`/cloud/v2/groups/${GROUP_ID}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { owner?: string };
+    // owner is a path like "users/12345"
+    return data.owner?.replace("users/", "") ?? null;
+  } catch (err) {
+    logger.error({ err }, "Failed to get group owner");
+    return null;
+  }
+}
+
 export async function getGroupMembership(userId: string): Promise<GroupMembership | null> {
   try {
+    // Check if user is the group owner (rank 255 / owner slot)
+    const ownerIdPromise = getGroupOwner();
+
     const res = await robloxFetch(
       `/cloud/v2/groups/${GROUP_ID}/memberships?filter=user=='users/${userId}'`
     );
@@ -97,14 +126,19 @@ export async function getGroupMembership(userId: string): Promise<GroupMembershi
       rank: number;
     };
 
+    const ownerId = await ownerIdPromise;
+    const isOwner = ownerId === userId;
+
     return {
       groupId: Number(GROUP_ID),
       membershipPath: membership.path,
       role: {
         id: Number(role.id),
-        name: role.displayName,
-        rank: role.rank,
+        name: isOwner ? "Owner" : role.displayName,
+        // Group owners show as rank 255 which is the highest possible
+        rank: isOwner ? 255 : role.rank,
       },
+      isOwner,
     };
   } catch (err) {
     logger.error({ err }, "Failed to get group membership");
@@ -114,7 +148,7 @@ export async function getGroupMembership(userId: string): Promise<GroupMembershi
 
 export async function isAdminRank(userId: string): Promise<boolean> {
   const membership = await getGroupMembership(userId);
-  return (membership?.role.rank ?? 0) >= ADMIN_MIN_RANK;
+  return (membership?.role.rank ?? 0) >= ADMIN_MIN_RANK || (membership?.isOwner ?? false);
 }
 
 export async function getGroupRoles(): Promise<GroupRole[]> {
@@ -140,10 +174,12 @@ export async function getGroupRoles(): Promise<GroupRole[]> {
   }
 }
 
-export async function setGroupRank(userId: string, roleId: number): Promise<boolean> {
+// membershipPath is the full path returned by getGroupMembership, e.g.
+// "groups/32805863/memberships/1234567890"
+export async function setGroupRank(membershipPath: string, roleId: number): Promise<boolean> {
   try {
     const res = await robloxFetch(
-      `/cloud/v2/groups/${GROUP_ID}/memberships/${userId}?updateMask=role`,
+      `/cloud/v2/${membershipPath}?updateMask=role`,
       {
         method: "PATCH",
         body: JSON.stringify({
@@ -182,7 +218,7 @@ export async function promoteUser(
   }
 
   const nextRole = sortedRoles[currentIndex + 1];
-  const success = await setGroupRank(userId, nextRole.id);
+  const success = await setGroupRank(membership.membershipPath, nextRole.id);
   return { success, newRole: success ? nextRole : undefined };
 }
 
@@ -205,7 +241,7 @@ export async function demoteUser(
   }
 
   const prevRole = sortedRoles[currentIndex - 1];
-  const success = await setGroupRank(userId, prevRole.id);
+  const success = await setGroupRank(membership.membershipPath, prevRole.id);
   return { success, newRole: success ? prevRole : undefined };
 }
 
