@@ -1,0 +1,22 @@
+name: citrus-ranking-bot
+services:
+  - name: discord-bot
+    type: worker
+    git:
+      repository: github.com/cxrruptcd/citrus-ranking-bot
+      branch: main
+    docker:
+      dockerfile: Dockerfile
+    instance_types:
+      - nano
+    regions:
+      - was
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_TOKEN
+        secret: true
+      - key: DATABASE_URL
+        secret: true
+      - key: DISCORD_CLIENT_ID
+        secret: true
