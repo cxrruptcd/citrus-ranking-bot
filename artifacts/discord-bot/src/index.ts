@@ -79,9 +79,10 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
-  await handleGuildMemberAdd(member).catch((err) =>
-    logger.error({ err }, "Unhandled error in guildMemberAdd")
-  );
+  await handleGuildMemberAdd(member).catch((err) => {
+    logger.error({ err }, "Unhandled error in guildMemberAdd");
+    console.error("[guildMemberAdd] Unhandled error:", err);
+  });
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -97,6 +98,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await command.execute(interaction);
   } catch (err) {
     logger.error({ err, command: interaction.commandName }, "Command execution failed");
+    console.error(`[InteractionCreate] Command "${interaction.commandName}" failed:`, err);
     const msg = { content: "An error occurred while running this command.", ephemeral: true };
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp(msg).catch(() => undefined);
@@ -108,5 +110,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.login(DISCORD_TOKEN).catch((err) => {
   logger.error({ err }, "Failed to login to Discord");
+  console.error("[login] Failed to login to Discord:", err);
   process.exit(1);
 });
