@@ -3,7 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { promoteUser, isAdminRank, getRobloxUserByUsername } from "../lib/roblox.js";
+import { promoteUser, isAdminRank, getRobloxUserByUsername, getGroupMembership } from "../lib/roblox.js";
 import { getUserByDiscordId } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
 
@@ -30,21 +30,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const admin = await isAdminRank(callerDb.robloxId);
-  if (!admin) {
+  const callerMembership = await getGroupMembership(callerDb.robloxId);
+  if (!callerMembership || callerMembership.role.rank < 13) {
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("Permission Denied")
-          .setDescription("You must be Presidential Assistant or higher to use this command."),
+          .setDescription("You must be rank 13 or higher in the group to use this command."),
       ],
     });
     return;
   }
 
   const usernameInput = interaction.options.getString("username", true);
-  const robloxUser = await getRobloxUserByUsername(usernameInput);
+  const [robloxUser] = await Promise.all([getRobloxUserByUsername(usernameInput)]);
   if (!robloxUser) {
     await interaction.editReply({
       embeds: [
@@ -52,6 +52,33 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setColor(0xe74c3c)
           .setTitle("User Not Found")
           .setDescription(`Could not find a Roblox user named **${usernameInput}**.`),
+      ],
+    });
+    return;
+  }
+
+  const targetMembership = await getGroupMembership(String(robloxUser.id));
+  if (!targetMembership) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Not in Group")
+          .setDescription(`**${robloxUser.name}** is not a member of the group.`),
+      ],
+    });
+    return;
+  }
+
+  if (targetMembership.role.rank >= callerMembership.role.rank) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Permission Denied")
+          .setDescription(
+            `You cannot promote **${robloxUser.name}** — they hold the rank **${targetMembership.role.name}** (${targetMembership.role.rank}), which is equal to or higher than your rank (${callerMembership.role.rank}).`
+          ),
       ],
     });
     return;
@@ -66,7 +93,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setColor(0xe74c3c)
           .setTitle("Promotion Failed")
           .setDescription(
-            `Could not promote **${robloxUser.name}**. They may already be at the highest rank or are not in the group.`
+            `Could not promote **${robloxUser.name}**. They may already be at the highest available rank.`
           ),
       ],
     });

@@ -3,7 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { demoteUser, isAdminRank, getRobloxUserByUsername } from "../lib/roblox.js";
+import { demoteUser, getRobloxUserByUsername, getGroupMembership } from "../lib/roblox.js";
 import { getUserByDiscordId } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
 
@@ -30,14 +30,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const admin = await isAdminRank(callerDb.robloxId);
-  if (!admin) {
+  const callerMembership = await getGroupMembership(callerDb.robloxId);
+  if (!callerMembership || callerMembership.role.rank < 13) {
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("Permission Denied")
-          .setDescription("You must be Presidential Assistant or higher to use this command."),
+          .setDescription("You must be rank 13 or higher in the group to use this command."),
       ],
     });
     return;
@@ -57,6 +57,33 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  const targetMembership = await getGroupMembership(String(robloxUser.id));
+  if (!targetMembership) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Not in Group")
+          .setDescription(`**${robloxUser.name}** is not a member of the group.`),
+      ],
+    });
+    return;
+  }
+
+  if (targetMembership.role.rank >= callerMembership.role.rank) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Permission Denied")
+          .setDescription(
+            `You cannot demote **${robloxUser.name}** — they hold the rank **${targetMembership.role.name}** (${targetMembership.role.rank}), which is equal to or higher than your rank (${callerMembership.role.rank}).`
+          ),
+      ],
+    });
+    return;
+  }
+
   const result = await demoteUser(String(robloxUser.id));
 
   if (!result.success || !result.newRole) {
@@ -66,7 +93,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setColor(0xe74c3c)
           .setTitle("Demotion Failed")
           .setDescription(
-            `Could not demote **${robloxUser.name}**. They may already be at the lowest rank or are not in the group.`
+            `Could not demote **${robloxUser.name}**. They may already be at the lowest rank.`
           ),
       ],
     });

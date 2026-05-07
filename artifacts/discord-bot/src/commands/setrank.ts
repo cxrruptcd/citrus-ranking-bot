@@ -3,7 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { getGroupRoles, setGroupRank, isAdminRank, getRobloxUserByUsername } from "../lib/roblox.js";
+import { getGroupRoles, setGroupRank, getRobloxUserByUsername, getGroupMembership } from "../lib/roblox.js";
 import { getUserByDiscordId } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
 
@@ -36,14 +36,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const admin = await isAdminRank(callerDb.robloxId);
-  if (!admin) {
+  const callerMembership = await getGroupMembership(callerDb.robloxId);
+  if (!callerMembership || callerMembership.role.rank < 13) {
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("Permission Denied")
-          .setDescription("You must be Presidential Assistant or higher to use this command."),
+          .setDescription("You must be rank 13 or higher in the group to use this command."),
       ],
     });
     return;
@@ -69,6 +69,33 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
+  const targetMembership = await getGroupMembership(String(robloxUser.id));
+  if (!targetMembership) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Not in Group")
+          .setDescription(`**${robloxUser.name}** is not a member of the group.`),
+      ],
+    });
+    return;
+  }
+
+  if (targetMembership.role.rank >= callerMembership.role.rank) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Permission Denied")
+          .setDescription(
+            `You cannot set the rank of **${robloxUser.name}** — they hold the rank **${targetMembership.role.name}** (${targetMembership.role.rank}), which is equal to or higher than your rank (${callerMembership.role.rank}).`
+          ),
+      ],
+    });
+    return;
+  }
+
   const rankNumber = parseInt(rankInput, 10);
   const role = isNaN(rankNumber)
     ? roles.find((r) => r.name.toLowerCase() === rankInput.toLowerCase())
@@ -88,6 +115,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           .setTitle("Rank Not Found")
           .setDescription(
             `Could not find a rank matching **${rankInput}**.\n\nAvailable ranks:\n${roleList}`
+          ),
+      ],
+    });
+    return;
+  }
+
+  if (role.rank >= callerMembership.role.rank) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xe74c3c)
+          .setTitle("Permission Denied")
+          .setDescription(
+            `You cannot assign the rank **${role.name}** (${role.rank}) — it is equal to or higher than your own rank (${callerMembership.role.rank}).`
           ),
       ],
     });

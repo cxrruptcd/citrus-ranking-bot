@@ -3,7 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
 } from "discord.js";
-import { isAdminRank } from "../lib/roblox.js";
+import { getGroupMembership } from "../lib/roblox.js";
 import { getUserByDiscordId, adjustCredits, getCredits } from "../lib/db.js";
 import { logger } from "../lib/logger.js";
 
@@ -15,15 +15,15 @@ export const data = new SlashCommandBuilder()
       .setName("check")
       .setDescription("Check your own credit balance or another user's")
       .addUserOption((opt) =>
-        opt.setName("user").setDescription("User to check (defaults to yourself)").setRequired(false)
+        opt.setName("user").setDescription("Discord user to check (defaults to yourself)").setRequired(false)
       )
   )
   .addSubcommand((sub) =>
     sub
       .setName("add")
-      .setDescription("Add credits to a user [Admin only]")
+      .setDescription("Add credits to a user [Rank 13+ only]")
       .addUserOption((opt) =>
-        opt.setName("user").setDescription("User to give credits to").setRequired(true)
+        opt.setName("user").setDescription("Discord user to give credits to").setRequired(true)
       )
       .addIntegerOption((opt) =>
         opt.setName("amount").setDescription("Number of credits to add").setRequired(true).setMinValue(1)
@@ -35,9 +35,9 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sub) =>
     sub
       .setName("remove")
-      .setDescription("Remove credits from a user [Admin only]")
+      .setDescription("Remove credits from a user [Rank 13+ only]")
       .addUserOption((opt) =>
-        opt.setName("user").setDescription("User to remove credits from").setRequired(true)
+        opt.setName("user").setDescription("Discord user to remove credits from").setRequired(true)
       )
       .addIntegerOption((opt) =>
         opt
@@ -101,14 +101,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  const admin = await isAdminRank(callerDb.robloxId);
-  if (!admin) {
+  const callerMembership = await getGroupMembership(callerDb.robloxId);
+  if (!callerMembership || callerMembership.role.rank < 13) {
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xe74c3c)
           .setTitle("Permission Denied")
-          .setDescription("You must be Presidential Assistant or higher to manage credits."),
+          .setDescription("You must be rank 13 or higher in the group to manage credits."),
       ],
     });
     return;

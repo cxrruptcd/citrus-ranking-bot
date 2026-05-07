@@ -2,7 +2,7 @@ import { logger } from "./logger.js";
 
 const ROBLOX_API_KEY = process.env.ROBLOX_API_KEY;
 const GROUP_ID = "32805863";
-const ADMIN_MIN_RANK = 20;
+const ADMIN_MIN_RANK = 13;
 
 if (!ROBLOX_API_KEY) {
   throw new Error("ROBLOX_API_KEY environment variable is required");
