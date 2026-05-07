@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   robloxId: text("roblox_id").notNull().unique(),
   robloxUsername: text("roblox_username").notNull(),
   credits: integer("credits").notNull().default(0),
+  department: text("department"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
